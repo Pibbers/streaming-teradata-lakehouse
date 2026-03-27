@@ -1,0 +1,11 @@
+crypto_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: teradata
+      server: "{{ env_var('TERADATA_HOST', 'localhost') }}"
+      username: "{{ env_var('TERADATA_USER', 'dbc') }}"
+      password: "{{ env_var('TERADATA_PASSWORD', 'dbc') }}"
+      schema: "{{ env_var('TERADATA_SCHEMA', 'crypto_db') }}"
+      threads: 4
+      tmode: ANSI

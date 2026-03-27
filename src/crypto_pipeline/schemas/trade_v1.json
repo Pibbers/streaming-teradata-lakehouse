@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_id",
+    "source",
+    "ingested_at",
+    "symbol",
+    "trade_id",
+    "trade_ts",
+    "price",
+    "qty",
+    "is_buyer_maker"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer" },
+    "event_id": { "type": "string" },
+    "source": { "type": "string" },
+    "ingested_at": { "type": "string" },
+
+    "symbol": { "type": "string" },
+    "trade_id": { "type": "integer" },
+    "trade_ts": { "type": "integer" },
+    "price": { "type": "number" },
+    "qty": { "type": "number" },
+    "is_buyer_maker": { "type": "boolean" }
+  }
+}

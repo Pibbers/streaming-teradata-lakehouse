@@ -1,0 +1,24 @@
+# Version control / IDE
+.git/
+.gitignore
+.idea/
+
+# Python build artefacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Local data — never bake into the image
+data/
+
+# Secrets — passed via env_file at runtime, not baked in
+.env
+
+# Warehouse / scripts — not needed inside the service containers
+warehouse/
+scripts/
+

@@ -1,0 +1,144 @@
+# Airflow orchestration stack.
+#
+# Requires the core infrastructure services (Kafka, MinIO) from compose.yml to
+# be running first, because the Airflow scheduler joins crypto-net to reach
+# MinIO (the dbt Teradata adapter reads trade data from MinIO via NOS).
+#
+# Start everything at once:
+#   docker compose -f docker/compose.yml -f docker/compose.airflow.yml up -d --build
+#
+# Or start Airflow independently after the core stack is already up:
+#   docker compose -f docker/compose.airflow.yml up -d --build
+#
+# Airflow UI: http://localhost:8080  (admin / admin)
+#
+# NOTE: FERNET_KEY and SECRET_KEY below are fixed development-only values.
+#       Generate fresh ones for any non-local deployment:
+#         python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# ── Shared config injected into every Airflow service ────────────────────────
+x-airflow-common:
+  &airflow-common
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.airflow
+  # Run as root to avoid bind-mount permission issues on Linux/WSL2.
+  # In production, set AIRFLOW_UID to the host user's UID instead.
+  user: "0:0"
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+    AIRFLOW__CORE__FERNET_KEY: "ZmDfcTF7_60GrrY167zsiPd67pEvs0aGOv2oasOM1Pg="
+    AIRFLOW__WEBSERVER__SECRET_KEY: "crypto-pipeline-dev-only"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    # Teradata connection — dbt connects here to build mart tables
+    TERADATA_HOST: "${TERADATA_HOST:-localhost}"
+    TERADATA_USER: "${TERADATA_USER:-dbc}"
+    TERADATA_PASSWORD: "${TERADATA_PASSWORD:-dbc}"
+    TERADATA_SCHEMA: "${TERADATA_SCHEMA:-crypto_db}"
+    # MinIO — reached via crypto-net using the Docker service hostname
+    MINIO_ENDPOINT: http://minio:9000
+    MINIO_ACCESS_KEY: minioadmin
+    MINIO_SECRET_KEY: minioadmin
+    MINIO_BUCKET: crypto-trades
+    # Hive Metastore — for Iceberg catalog
+    HIVE_METASTORE_URI: thrift://hive-metastore:9083
+    HIVE_WAREHOUSE_DIR: s3a://iceberg
+  volumes:
+    - ../airflow/dags:/opt/airflow/dags:ro          # DAG definitions
+    - ../warehouse:/opt/airflow/project/warehouse:ro # dbt project + profiles
+    - airflow_logs:/opt/airflow/logs
+  depends_on:
+    airflow-db:
+      condition: service_healthy
+  networks:
+    - crypto-net   # reach MinIO / Kafka
+    - airflow-net  # internal: webserver ↔ scheduler ↔ postgres
+
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+
+  airflow-db:
+    image: postgres:17
+    container_name: airflow-db
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - airflow-net
+
+  # One-shot: initialise the Airflow database and create the admin user.
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com
+        echo "Airflow initialised."
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: airflow-webserver
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "airflow", "jobs", "check", "--job-type", "SchedulerJob", "--hostname", "$${HOSTNAME}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+# ─────────────────────────────────────────────────────────────────────────────
+volumes:
+  airflow_db:
+  airflow_logs:
+
+networks:
+  crypto-net:
+    name: crypto-net   # shared with compose.yml; created here if not yet present
+  airflow-net:
+    name: airflow-net

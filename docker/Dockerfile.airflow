@@ -1,0 +1,15 @@
+FROM apache/airflow:2.9.3-python3.11
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+
+# Install dbt packages into the Airflow Python environment.
+# Pin to the same constraint range used in pyproject.toml.
+RUN pip install --no-cache-dir \
+        "dbt-core>=1.7" \
+        "dbt-teradata>=1.7"

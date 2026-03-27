@@ -1,0 +1,9 @@
+version: 2
+
+models:
+  - name: fct_ingestion_latency_1m
+    columns:
+      - name: pair
+        tests: [not_null]
+      - name: minute_bucket
+        tests: [not_null]

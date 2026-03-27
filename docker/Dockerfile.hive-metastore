@@ -1,0 +1,57 @@
+# Hive Metastore with MySQL backend and S3/MinIO support
+FROM apache/hive:3.1.3
+
+# Install wget, MySQL client, and envsubst
+USER root
+RUN apt-get update && apt-get install -y wget default-mysql-client gettext-base && \
+    rm -rf /var/lib/apt/lists/*
+
+# Download MySQL JDBC driver for Hive 4.0.0
+RUN wget -O /opt/hive/lib/mysql-connector-java.jar \
+    https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.30/mysql-connector-java-8.0.30.jar
+
+# Download Hadoop AWS JARs for S3/MinIO support.
+# Versions must match the bundled Hadoop (3.1.0) in the apache/hive:3.1.3 base image.
+# Do NOT add hadoop-common here — it is already at /opt/hadoop/share/hadoop/common/hadoop-common-3.1.0.jar.
+# Adding a different version causes NoSuchMethodError (HadoopKerberosName.setRuleMechanism) at startup.
+RUN wget -P /opt/hive/lib/ \
+    https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.1.0/hadoop-aws-3.1.0.jar && \
+    wget -P /opt/hive/lib/ \
+    https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.11.271/aws-java-sdk-bundle-1.11.271.jar
+
+# Verify JAR files are downloaded
+RUN ls -lh /opt/hive/lib/mysql-connector-java.jar /opt/hive/lib/hadoop-aws-3.1.0.jar
+
+# Copy configuration files
+COPY hive-site.xml /opt/hive/conf/hive-site.xml
+
+# Create entrypoint script
+RUN cat > /docker-hive-metastore-entrypoint.sh << 'EOF'
+#!/bin/bash
+set -e
+
+# Wait for MySQL to be ready
+echo "Waiting for MySQL to be ready..."
+while ! mysqladmin ping -h"$HIVE_DB_HOSTNAME" -P3306 -u"$HIVE_DB_USER" -p"$HIVE_DB_PASSWORD" --silent; do
+    echo "MySQL is unavailable - sleeping"
+    sleep 2
+done
+echo "MySQL is ready!"
+
+# Substitute environment variables in hive-site.xml
+echo "Substituting environment variables in hive-site.xml..."
+envsubst < /opt/hive/conf/hive-site.xml > /opt/hive/conf/hive-site.xml.tmp && mv /opt/hive/conf/hive-site.xml.tmp /opt/hive/conf/hive-site.xml
+
+# Initialize Hive Metastore schema if needed
+echo "Initializing Hive Metastore schema..."
+/opt/hive/bin/schematool -dbType mysql -initSchema --verbose || echo "Schema already exists or initialization failed"
+
+# Start Hive Metastore service
+echo "Starting Hive Metastore service..."
+exec /opt/hive/bin/hive --service metastore
+EOF
+
+RUN chmod +x /docker-hive-metastore-entrypoint.sh
+
+# Set entrypoint
+ENTRYPOINT ["/docker-hive-metastore-entrypoint.sh"]

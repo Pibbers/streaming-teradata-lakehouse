@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: ext
+    # In Teradata, schema = database.  The NOS foreign table ext.trades is
+    # created by `crypto-init-db` (see src/crypto_pipeline/_cli.py).
+    schema: ext
+    tables:
+      - name: trades

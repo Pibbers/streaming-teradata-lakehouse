@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# dbt
+dbt_packages/
+target/
+
+# Data
+data/parquet/
+data/duckdb/
+data/raw/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker_default/
+
+# Env
+.env
