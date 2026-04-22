@@ -33,6 +33,31 @@
     <value>0.0.0.0</value>
   </property>
 
+  <property>
+    <name>hive.support.concurrency</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>hive.lock.manager</name>
+    <value>org.apache.hadoop.hive.ql.lockmgr.EmbeddedLockManager</value>
+  </property>
+  <property>
+    <name>hive.metastore.failure.retries</name>
+    <value>3</value>
+  </property>
+  <property>
+    <name>iceberg.hive.lock-timeout-ms</name>
+    <value>180000</value>
+  </property>
+  <property>
+    <name>iceberg.hive.lock-check-min-wait-ms</name>
+    <value>50</value>
+  </property>
+  <property>
+    <name>iceberg.hive.lock-check-max-wait-ms</name>
+    <value>5000</value>
+  </property>
+
   <!-- S3/MinIO Configuration -->
   <property>
     <name>fs.s3a.endpoint</name>
